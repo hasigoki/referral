@@ -7,7 +7,7 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { TrendingUp, Users, DollarSign, Clock } from 'lucide-react';
 
 export default async function ReferrerPage() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   

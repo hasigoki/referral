@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ScanLine, X, Check, AlertCircle, User, Gift, ArrowRight } from 'lucide-react';
+import { ScanLine, X, Check, AlertCircle, User, Gift, ArrowRight, Loader2 } from 'lucide-react';
 import { QRCodeScanner } from '@/components/QRCodeScanner';
 import { TransactionBreakdown } from '@/components/TransactionBreakdown';
 import { Button, Card, Input } from '@/components/ui';
 import { formatCurrency } from '@/lib/utils';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
-type ScanState = 'idle' | 'scanning' | 'validating' | 'confirmed' | 'processing' | 'success' | 'error';
+type ScanState = 'loading' | 'idle' | 'scanning' | 'validating' | 'confirmed' | 'processing' | 'success' | 'error';
 
 interface ReferralData {
   code: string;
@@ -37,18 +38,50 @@ interface TransactionData {
 
 export default function ScanPage() {
   const router = useRouter();
-  const [state, setState] = useState<ScanState>('idle');
+  const [state, setState] = useState<ScanState>('loading');
+  const [providerId, setProviderId] = useState<string | null>(null);
   const [referralData, setReferralData] = useState<ReferralData | null>(null);
   const [transactionData, setTransactionData] = useState<TransactionData | null>(null);
   const [manualCode, setManualCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Load the provider ID for the current user
+  useEffect(() => {
+    async function loadProvider() {
+      const supabase = getSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push('/auth/login');
+        return;
+      }
+
+      // Get the service provider for this user
+      const { data: provider, error: providerError } = await supabase
+        .from('service_providers')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single();
+
+      if (providerError || !provider) {
+        setError('You must have a business account to scan codes');
+        setState('error');
+        return;
+      }
+
+      setProviderId(provider.id);
+      setState('idle');
+    }
+
+    loadProvider();
+  }, [router]);
 
   const validateCode = async (code: string) => {
     setState('validating');
     setError(null);
 
     try {
-      const response = await fetch(`/api/referral/validate?code=${code}`);
+      const response = await fetch(`/api/referral/validate?code=${code}&providerId=${providerId}`);
       const data = await response.json();
 
       if (!data.valid) {
@@ -70,7 +103,7 @@ export default function ScanPage() {
 
   const handleScan = useCallback((code: string) => {
     validateCode(code);
-  }, []);
+  }, [providerId]);
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,18 +113,17 @@ export default function ScanPage() {
   };
 
   const processTransaction = async () => {
-    if (!referralData) return;
+    if (!referralData || !providerId) return;
 
     setState('processing');
     setError(null);
 
     try {
-      // In a real app, you'd get the providerId from the authenticated user's provider record
       const response = await fetch('/api/payments/create-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          providerId: 'provider-id-here', // This would come from the session
+          providerId: providerId,
           referralCode: referralData.code,
         }),
       });
@@ -136,6 +168,20 @@ export default function ScanPage() {
       <main className="pt-16 pb-8 px-4">
         <div className="max-w-lg mx-auto">
           <AnimatePresence mode="wait">
+            {/* Loading State */}
+            {state === 'loading' && (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center min-h-[60vh]"
+              >
+                <Loader2 className="w-8 h-8 animate-spin text-brand-500 mb-4" />
+                <p className="text-surface-600">Loading...</p>
+              </motion.div>
+            )}
+
             {/* Idle State - Show scan options */}
             {state === 'idle' && (
               <motion.div
@@ -348,9 +394,14 @@ export default function ScanPage() {
                     Something went wrong
                   </h2>
                   <p className="text-surface-600 mb-6">{error}</p>
-                  <Button onClick={resetScan} variant="outline">
-                    Try Again
-                  </Button>
+                  <div className="flex gap-3 justify-center">
+                    <Button onClick={() => router.push('/dashboard')} variant="outline">
+                      Go to Dashboard
+                    </Button>
+                    <Button onClick={resetScan}>
+                      Try Again
+                    </Button>
+                  </div>
                 </Card>
               </motion.div>
             )}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home,
@@ -15,8 +15,10 @@ import {
   X,
   LogOut,
   Settings,
+  Compass,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import type { UserRole } from '@/types';
 
 interface NavItem {
@@ -32,6 +34,12 @@ const navItems: NavItem[] = [
     label: 'Dashboard',
     icon: Home,
     roles: ['client', 'referrer', 'provider', 'admin'],
+  },
+  {
+    href: '/explore',
+    label: 'Explore',
+    icon: Compass,
+    roles: ['client'],
   },
   {
     href: '/referrer',
@@ -63,12 +71,27 @@ interface NavigationProps {
   userRole: UserRole;
   userName?: string;
   userAvatar?: string;
-  onSignOut?: () => void;
 }
 
-export function Navigation({ userRole, userName, userAvatar, onSignOut }: NavigationProps) {
+export function Navigation({ userRole, userName, userAvatar }: NavigationProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      const supabase = getSupabaseClient();
+      await supabase.auth.signOut();
+      router.push('/');
+      router.refresh();
+    } catch (error) {
+      console.error('Sign out error:', error);
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
 
   const filteredNavItems = navItems.filter((item) => item.roles.includes(userRole));
 
@@ -139,11 +162,12 @@ export function Navigation({ userRole, userName, userAvatar, onSignOut }: Naviga
               Settings
             </Link>
             <button
-              onClick={onSignOut}
-              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              onClick={handleSignOut}
+              disabled={isSigningOut}
+              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
             >
               <LogOut className="w-4 h-4" />
-              Sign Out
+              {isSigningOut ? 'Signing out...' : 'Sign Out'}
             </button>
           </div>
         </div>
@@ -220,11 +244,12 @@ export function Navigation({ userRole, userName, userAvatar, onSignOut }: Naviga
 
               <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-surface-200">
                 <button
-                  onClick={onSignOut}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                  onClick={handleSignOut}
+                  disabled={isSigningOut}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl transition-colors disabled:opacity-50"
                 >
                   <LogOut className="w-5 h-5" />
-                  Sign Out
+                  {isSigningOut ? 'Signing out...' : 'Sign Out'}
                 </button>
               </div>
             </motion.div>

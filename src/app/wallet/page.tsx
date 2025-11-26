@@ -7,7 +7,7 @@ import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { ArrowUpRight, ArrowDownLeft, Clock, CheckCircle, XCircle } from 'lucide-react';
 
 export default async function WalletPage() {
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   

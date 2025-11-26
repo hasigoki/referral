@@ -18,21 +18,27 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Login form submitted!');
     setLoading(true);
     setError(null);
 
     try {
       const supabase = getSupabaseClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      console.log('Calling signInWithPassword...');
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
+      console.log('Login result:', { data, signInError });
+
       if (signInError) throw signInError;
 
-      router.push('/dashboard');
-      router.refresh();
+      console.log('Login successful, redirecting...');
+      // Use hard navigation to ensure cookies are properly synced with server
+      window.location.href = '/dashboard';
     } catch (err) {
+      console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Failed to sign in');
     } finally {
       setLoading(false);

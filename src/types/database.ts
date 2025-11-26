@@ -87,6 +87,10 @@ export interface Database {
           provider_payout: number;
         }[];
       };
+      increment_wallet_balance: {
+        Args: { p_wallet_id: string; p_amount: number };
+        Returns: void;
+      };
     };
   };
 }
@@ -236,4 +240,10 @@ export interface TransactionWithDetails extends Transaction {
 
 export interface ReferralCodeWithReferrer extends ReferralCode {
   referrer: Profile;
+}
+
+// Partial profile for dashboard transaction display
+export interface TransactionWithProfiles extends Transaction {
+  client: Pick<Profile, 'full_name'> | null;
+  referrer: Pick<Profile, 'full_name'> | null;
 }

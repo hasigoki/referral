@@ -34,6 +34,16 @@ const roles = [
   },
 ];
 
+// Generate a unique referral code
+function generateReferralCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let result = '';
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,10 +64,13 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
+    console.log('Starting signup...');
+
     try {
       const supabase = getSupabaseClient();
 
       // Sign up
+      console.log('Calling supabase.auth.signUp...');
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -69,10 +82,19 @@ export default function SignupPage() {
         },
       });
 
+      console.log('Auth result:', { authData, signUpError });
+
       if (signUpError) throw signUpError;
+
+      if (!authData.user) {
+        throw new Error('No user returned from signup. Check if email confirmation is disabled in Supabase.');
+      }
+
+      console.log('User created:', authData.user.id);
 
       if (authData.user) {
         // Create profile
+        console.log('Creating profile...');
         const { error: profileError } = await supabase.from('profiles').insert({
           id: authData.user.id,
           email,
@@ -80,7 +102,31 @@ export default function SignupPage() {
           role: selectedRole,
         });
 
+        console.log('Profile result:', { profileError });
         if (profileError) throw profileError;
+
+        // Create wallet for referrers and providers (they can earn commissions)
+        if (selectedRole === 'referrer' || selectedRole === 'provider') {
+          const { error: walletError } = await supabase.from('wallets').insert({
+            user_id: authData.user.id,
+          });
+
+          if (walletError) {
+            console.error('Wallet creation error:', walletError);
+            // Don't throw - wallet can be created by trigger too
+          }
+
+          // Create referral code
+          const { error: codeError } = await supabase.from('referral_codes').insert({
+            referrer_id: authData.user.id,
+            code: generateReferralCode(),
+          });
+
+          if (codeError) {
+            console.error('Referral code creation error:', codeError);
+            // Don't throw - code can be created by trigger too
+          }
+        }
 
         // If provider, create service provider record
         if (selectedRole === 'provider' && businessName) {
@@ -96,10 +142,12 @@ export default function SignupPage() {
           if (providerError) throw providerError;
         }
 
-        router.push('/dashboard');
-        router.refresh();
+        console.log('Signup complete, redirecting to dashboard...');
+        // Use hard navigation to ensure cookies are properly synced with server
+        window.location.href = '/dashboard';
       }
     } catch (err) {
+      console.error('Signup error:', err);
       setError(err instanceof Error ? err.message : 'Failed to create account');
     } finally {
       setLoading(false);

@@ -29,6 +29,25 @@ export async function POST(request: NextRequest) {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         const metadata = paymentIntent.metadata;
 
+        // Idempotency check: Skip if transaction already exists for this payment intent
+        const { data: existingTx } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('stripe_payment_intent_id', paymentIntent.id)
+          .single();
+
+        if (existingTx) {
+          console.log(`Transaction already exists for payment intent ${paymentIntent.id}, skipping`);
+          break;
+        }
+
+        // Safe parsing helper with validation
+        const safeParseInt = (value: string | undefined, defaultValue = 0): number => {
+          if (!value) return defaultValue;
+          const parsed = parseInt(value, 10);
+          return isNaN(parsed) ? defaultValue : parsed;
+        };
+
         // Create transaction record
         const { data: transaction, error: txError } = await supabase
           .from('transactions')
@@ -37,11 +56,11 @@ export async function POST(request: NextRequest) {
             provider_id: metadata.provider_id,
             referrer_id: metadata.referrer_id || null,
             referral_code_id: metadata.referral_code_id || null,
-            original_amount: parseInt(metadata.original_amount),
-            discount_amount: parseInt(metadata.discount_amount),
+            original_amount: safeParseInt(metadata.original_amount),
+            discount_amount: safeParseInt(metadata.discount_amount),
             final_amount: paymentIntent.amount,
-            referrer_commission: parseInt(metadata.referrer_commission || '0'),
-            platform_fee: parseInt(metadata.platform_fee),
+            referrer_commission: safeParseInt(metadata.referrer_commission),
+            platform_fee: safeParseInt(metadata.platform_fee),
             provider_payout: paymentIntent.transfer_data?.amount || 0,
             is_first_interaction: metadata.is_first_interaction === 'true',
             stripe_payment_intent_id: paymentIntent.id,
@@ -66,7 +85,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Transfer to referrer if applicable
-        const referrerCommission = parseInt(metadata.referrer_commission || '0');
+        const referrerCommission = safeParseInt(metadata.referrer_commission);
         if (referrerCommission > 0 && metadata.referrer_id) {
           // Get referrer's Stripe account
           const { data: referrerProfile } = await supabase
@@ -185,15 +204,15 @@ export async function POST(request: NextRequest) {
             .single();
 
           if (payoutRecord) {
-            await supabase
-              .from('wallets')
-              .update({
-                available_balance: supabase.rpc('add_to_balance', {
-                  wallet_id: payoutRecord.wallet_id,
-                  amount: payoutRecord.amount,
-                }),
-              })
-              .eq('id', payoutRecord.wallet_id);
+            // Return failed payout amount to wallet using raw SQL increment
+            const { error: walletError } = await supabase.rpc('increment_wallet_balance', {
+              p_wallet_id: payoutRecord.wallet_id,
+              p_amount: payoutRecord.amount,
+            });
+
+            if (walletError) {
+              console.error('Failed to return funds to wallet:', walletError);
+            }
           }
         }
 

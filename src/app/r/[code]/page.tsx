@@ -11,7 +11,7 @@ interface Props {
 export default async function ReferralPage({ params }: Props) {
   const { code } = params;
 
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
 
   // Validate the referral code
   const { data: referralCode, error } = await supabase
