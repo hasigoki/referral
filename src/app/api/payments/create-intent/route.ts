@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase/server';
 import { stripe, calculateSplits, createPaymentIntent } from '@/lib/stripe';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();

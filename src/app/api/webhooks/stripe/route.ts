@@ -4,6 +4,8 @@ import { stripe, constructWebhookEvent, transferToReferrer } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase/server';
 import type Stripe from 'stripe';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = headers().get('stripe-signature');
