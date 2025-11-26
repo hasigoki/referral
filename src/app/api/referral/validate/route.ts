@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
         id,
         code,
         is_active,
-        referrer:profiles (
+        referrer_id,
+        referrer:profiles!referral_codes_referrer_id_fkey (
           id,
           full_name,
           avatar_url
@@ -44,8 +45,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Get the referrer data (handle as single object or first element of array)
+    const referrer = Array.isArray(referralCode.referrer)
+      ? referralCode.referrer[0]
+      : referralCode.referrer;
+
     // Check if user is trying to use their own code
-    if (user && referralCode.referrer?.id === user.id) {
+    if (user && referralCode.referrer_id === user.id) {
       return NextResponse.json({
         valid: false,
         error: 'You cannot use your own referral code',
@@ -74,9 +80,9 @@ export async function GET(request: NextRequest) {
       valid: true,
       code: referralCode.code,
       referrer: {
-        id: referralCode.referrer?.id,
-        name: referralCode.referrer?.full_name,
-        avatar: referralCode.referrer?.avatar_url,
+        id: referrer?.id,
+        name: referrer?.full_name,
+        avatar: referrer?.avatar_url,
       },
     });
   } catch (error) {
